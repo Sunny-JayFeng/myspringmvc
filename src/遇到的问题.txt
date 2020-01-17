@@ -1,0 +1,551 @@
+如何根据配置文件中的包名，对这个包中所有的类进行扫描
+    首先，通过 Thread.currentThread().getContextClassLoader().getResource("包名");
+    返回一个 URL
+        URL url = Thread.currentThread().getContextClassLoader().getResource("包名");
+    输出一下这个URL
+        System.out.println(url);
+        file:/E:/Duing/LevelOne%e5%b0%8f%e4%bb%bb%e5%8a%a1/%e5%b0%81%e8%a3%85%e5%b0%8fSpringMVC%e6%a1%86%e6%9e%b6/out/production/%e5%b0%81%e8%a3%85%e5%b0%8fSpringMVC%e6%a1%86%e6%9e%b6/controller
+    输出一下URL路径
+        System.out.println(url.getPath());
+        /E:/Duing/LevelOne%e5%b0%8f%e4%bb%bb%e5%8a%a1/%e5%b0%81%e8%a3%85%e5%b0%8fSpringMVC%e6%a1%86%e6%9e%b6/out/production/%e5%b0%81%e8%a3%85%e5%b0%8fSpringMVC%e6%a1%86%e6%9e%b6/controller
+    url是不能传输中文和其他特殊字符的，包括空格也不行
+    中文和特殊字符都会转为url编码，url编码是以%开头的一种编码
+
+    通过getProtocol(),查看URL的协议，返回的是一个字符串
+    我们扫包用的，都是file
+        url.getProtocol();
+
+    if("file".equals(url.getProtocol()) {
+        通过URLDecoder.decode(String, String); 这个方法，将URL的路径转为UTF-8编码格式的file路径
+        String filePath = URLDecoder.decode(url.getPath(), "UTF-8");
+
+        输出一下这个filePath
+        System.out.println(filePath);
+        /E:/Duing/LevelOne小任务/封装小SpringMVC框架/out/production/封装小SpringMVC框架/controller
+
+        这个路径的File
+        File file = new File(filePath);
+
+        接下来获取该file下的所有file(是包也好，是class文件也好，都能获取到)
+        File[] files = file.listFiles();
+        通过files是否为空，确定它是文件，还是包
+        if(files == null) 是文件
+        else 是包
+
+        如果是包，那还需要递归。进行扫描
+        这里用到了深度优先搜索
+
+        如果它是文件，那我需要获取它的文件名，如:TestController.class
+        然后拼接出包名+类名
+        String className = file.getName().split("\\.")[0];
+        String realName = 作为参数传进来的包名 + className;
+        然后通过ClassLoader加载类
+        Class clazz = ClassLoader.getSystemClassLoader().loadClass(realName);
+        这样就完成了
+
+        2019/11/3/01：24
+        发现问题： 利用ClassLoader.getSystemClassLoader().loadClass(it.next());
+        对扫包的时候，加载的时候出了问题，请求发过来，扫包这里的
+        ClassLoader.getSystemClassLoader().loadClass(it.next());
+        一直报Class not found Exception, 用Class.forName();
+        我看了源码，没没看出个什么，只知道它通过Bootstrap加载器加载
+        后来我改用Thread.currentThread().getContextClassLoader().loadClass(it.next());
+        就可以了。
+        现在我查看它的底层，发现它和ClassLoader.getSystemClassLoader().loadClass();调用的是同样的方法
+        这让我很有兴趣。
+        现在已经比较晚了，明天还要上课，明天再继续看。
+
+    }
+
+    这是我当时测试的代码
+        //        String name = ReadProperties.getPackageName();
+        //        URL url = Thread.currentThread().getContextClassLoader().getResource(name);
+        //        if("file".equals(url.getProtocol())) {
+        //            String filePath = URLDecoder.decode(url.getPath(), "UTF-8");
+        //            System.out.println(filePath);
+        //            System.out.println(new File(filePath).getName());
+        //            System.out.println(new File(filePath).listFiles()[0].getName());
+        //            System.out.println(new File(filePath).listFiles()[1].getName());
+        //            System.out.println(new File(filePath).listFiles()[2].getName());
+        //            System.out.println(new File(filePath).listFiles()[0].listFiles().length);
+        //            System.out.println(new File(filePath).listFiles()[2].listFiles());
+        //
+        //            System.out.println(new File(filePath).listFiles()[2].getName());
+        //            String className = new File(filePath).listFiles()[2].getName().split("\\.")[0].trim();
+        //            String realName = ReadProperties.getPackageName() + "." + className;
+        //            System.out.println(realName);
+        //            Class clazz = ClassLoader.getSystemClassLoader().loadClass(realName);
+        //            System.out.println(clazz);
+        //            System.out.println(clazz.newInstance());
+        //
+        //
+        //            System.out.println("==========================");
+        //            System.out.println(getAllClassName(new File(filePath).getName(), new File(filePath)));
+        //        }
+
+    这是我应用的深度优先搜索
+        private static List<String> getAllClassName(String packageName, File file) {
+            if(packageName == null || packageName.length() == 0 || file == null) return new ArrayList<>();
+            List<String> classNameList = new ArrayList<>();
+            File[] files = file.listFiles();
+            if(files == null) classNameList.add(packageName + "." + file.getName().split("\\.")[0]);
+            else {
+                for(File theFile : files) {
+                    if(theFile.getName().contains(".class")) classNameList.addAll(getAllClassName(packageName, theFile));
+                    else classNameList.addAll(getAllClassName(packageName + "." + theFile.getName(), theFile));
+                }
+            }
+            return classNameList;
+        }
+
+-------------------------------------------------------------------------------------------------
+获取参数注解
+    method.getParameterAnnotations(); 返回的是一个二维数组 Annotation[][]
+    代码如下：
+        for(Method method : methods) {
+            if(requestMapping != null) {
+                Annotation[][] params = method.getParameterAnnotations();
+                System.out.println(params.length);
+                for(Annotation[] param1 : params) {
+                    System.out.println(param1.length);
+                    for(Annotation param2 : param1) {
+                        System.out.println(((Param)param2).value());
+                    }
+                }
+            }
+        }
+    对于:
+        @RequestMapping(value="/test")
+        public void test(@Param("name") String name, @Param("testParam") String test) {
+            System.out.println("test");
+        }
+        @RequestMapping(value="/show")
+        public void show(@Param("name") String name, @Param("password") String password, @Param("userName") String userName) {
+            System.out.println("show");
+        }
+    输出了：
+        2
+        1
+        name
+        1
+        testParam
+        3
+        1
+        name
+        1
+        password
+        1
+        userName
+
+如何获得方法的所有参数类型
+    Parameter[] parameters = method.getParameters();
+    for(Parameter parameter : parameters) {
+        Clas1s clazz = parameter.getType();
+    }
+
+思路，当发送请求过来的时候，对URL进行路径解析。拼接出对应的controller上的RequestMapping(value="");
+    从最后一个 / 开始截取解析，直到找到一个，然后再拿整个路径，去匹配这个controller中的方法。
+    我存在methodBox里的，是方法上的RequestMapping的value值。
+    比如请求：http://127.0.0.1:8080/test/mySpringMVC/testShow
+    截取出路径 /test/mySpringMVC/testShow
+    首先整个匹配controller /test/mySpringMVC/testShow   如果匹配到了，则找该类下面RequestMapping
+    的value值为 ""的方法，如果没有，那就是响应405
+
+    如果没有匹配到controller，那找/test/mySpringMVC
+    以此类推
+
+找到方法之后，我需要知道，方法都需要什么参数，
+    通过methodBox拿到对应的需要执行的方法，得到一个Method对象
+    Method method = methodBox.get("路径");
+    然后通过getParameters()方法，获得所有的参数对象Parameter
+    Parameter[] parameters = method.getParameters();
+    通过一个循环，就能得到每个参数的类型
+    for(Parameter parameter : parameters) {
+        Class clazz = parameter.getType();
+    }
+    这样就能知道我每个参数都具体是什么类型的，如果要获取URL中的参数，那肯定是String类型的，
+    但是我可以接收HttpServletRequest, 也可以接收 HttpServletResponse;
+    对于 HttpServletRequest  它是
+        class org.apache.catalina.connector.RequestFacade
+    对于 HttpServletResponse 它是
+        class org.apache.catalina.connector.ResponseFacade
+
+    因此，我可以判断参数类型中，是否有包含这两者或者其中之一的，如果有，那我需要传递request，response
+
+    如果有request和response，那我必须将request和response，传递过去
+    method.invoke(obj, request, response,...otherParameters);
+
+    对于那些通过URL传的参数，我通过method.getParameterAnnotations() 这个方法去获取，参数值。
+    getParameterAnnotation()这个方法返回一个二维数组  Annotation[][]
+    Annotation[][] parameterCounts = method.getParameterAnnotations();
+    返回的是二维数组，parameterCounts.length 表示的是，这个方法有多少个参数(带注解的),
+    Annotation[] parameterValues  parameterValues.length表示的是，这个注解里，有多少值，
+    是我们自己写的，所以很清楚，它只有一个value
+    具体往下，就是这个值了，我们规定@Param("值") 值必须和参数名称一致
+
+    那怎么操作呢？
+    首先，我们得到所有的，需要从请URL中获取的参数的名字。
+    (或许我可以先写一个类，请求过来的时候我就解析出所有参数，放到一个专门存参数的Map集合里，
+    通过getParameter，就能得到值);
+    而我需要哪些URL中的参数，是通过Annotation[][]就能知道的。
+------------------------------------------------------------------------------------------------------------
+一开始我确实想通过上面的方式，去设置方法需要的参数，但是这种方法只能设置带Param注解的参数，如果我的参数不带注解，
+比如:HttpServletRequest, HttpServletResponse，那我该怎么设置
+我得通过 method.getParameters(); 获取方法需要的所有参数， parameter.getType()参数类型，返回值是Class类型
+如此一来，我带注解的那部分参数，不就获取了两遍了吗？
+所以我抛弃了method.getParameterAnnotations(); 这种方法
+采用method.getParameters();
+        List<Object> argumentsValue = new ArrayList<>();
+        Parameter[] parameters = method.getParameters();
+        for(Parameter parameter : parameters) {
+            String parameterType = parameter.getType().toString();
+            if(parameterType.endsWith(".http.HttpServletRequest")) {
+                argumentsValue.add(request);
+            }else if(parameterType.endsWith(".http.HttpServletResponse")) {
+                argumentsValue.add(response);
+            }
+            Param param = parameter.getAnnotation(Param.class);
+            if(param == null) {
+                continue;
+            }else {
+                argumentsValue.add(request.getParameter(param.value()));
+            }
+        }
+        method.invoke(obj, argumentsValue.toArray());
+运行，验证，通过。
+
+无论是解析路径也好，解析参数也好，显然，我都是解析URL中的URL，那我需要写一个专门解析URL的类
+    通过request.getRequestURI(); 获得请求路径
+    通过request.getParameterNames(); 获得所有参数名
+
+
+当发送请求的时候，后端在ScanPackage这个用于扫包的类下面，总会报异常
+    报了一个类找不到异常: ClassNotFoundException: controller.mytest.MyTest
+    用于加载的类的名字字符串错了，我用一个main方法去测试
+    ClassLoader.getSystemClassLoader().loadClass("controller.mytest.MyTest");
+    并不会报异常。
+    但是，如果我改用Class.forName(it.next()); 则不会抛出异常，正常执行。
+    这是为什么？
+
+    我尝试在百度上找答案，然而如我所料，百度找不到答案，百度只说了Class.forName()
+    和 ClassLoader.getSystemClassLoader().loadClass() 两者的区别
+
+    对于Class.forName()，我什么都看不到
+        /**
+         * Returns the {@code Class} object associated with the class or
+         * interface with the given string name.  Invoking this method is
+         * equivalent to:
+        @CallerSensitive
+        public static Class<?> forName(String className)
+                    throws ClassNotFoundException {
+            Class<?> caller = Reflection.getCallerClass();
+            return forName0(className, true, ClassLoader.getClassLoader(caller), caller);
+        }
+
+        @CallerSensitive
+        public static native Class<?> getCallerClass();
+
+        /** Called after security check for system loader access checks have been made. */
+        private static native Class<?> forName0(String name, boolean initialize,
+                                                ClassLoader loader,
+                                                Class<?> caller)
+            throws ClassNotFoundException;
+
+    我尝试着查看ClassLoader...loadClass()方法的源码，
+    相关方法如下：
+        /**
+         * Loads the class with the specified <a href="#name">binary name</a>.
+         * This method searches for classes in the same manner as the {@link
+         * #loadClass(String, boolean)} method.  It is invoked by the Java virtual
+         * machine to resolve class references.  Invoking this method is equivalent
+         * to invoking {@link #loadClass(String, boolean) <tt>loadClass(name,
+         * false)</tt>}.
+        public Class<?> loadClass(String name) throws ClassNotFoundException {
+            return loadClass(name, false);
+        }
+
+        /**
+         * Loads the class with the specified <a href="#name">binary name</a>.  The
+         * default implementation of this method searches for classes in the
+         * following order:
+         *
+         * <ol>
+         *
+         *   <li><p> Invoke {@link #findLoadedClass(String)} to check if the class
+         *   has already been loaded.  </p></li>
+         *
+         *   <li><p> Invoke the {@link #loadClass(String) <tt>loadClass</tt>} method
+         *   on the parent class loader.  If the parent is <tt>null</tt> the class
+         *   loader built-in to the virtual machine is used, instead.  </p></li>
+         *
+         *   <li><p> Invoke the {@link #findClass(String)} method to find the
+         *   class.  </p></li>
+         *
+         * </ol>
+         *
+         * <p> If the class was found using the above steps, and the
+         * <tt>resolve</tt> flag is true, this method will then invoke the {@link
+         * #resolveClass(Class)} method on the resulting <tt>Class</tt> object.
+         *
+         * <p> Subclasses of <tt>ClassLoader</tt> are encouraged to override {@link
+         * #findClass(String)}, rather than this method.  </p>
+         *
+         * <p> Unless overridden, this method synchronizes on the result of
+         * {@link #getClassLoadingLock <tt>getClassLoadingLock</tt>} method
+         * during the entire class loading process.
+        protected Class<?> loadClass(String name, boolean resolve)
+            throws ClassNotFoundException
+        {
+            synchronized (getClassLoadingLock(name)) {  线程安全锁
+                // First, check if the class has already been loaded
+                Class<?> c = findLoadedClass(name);   先看这个类是否加载过了，如果加载过了，直接给
+                if (c == null) {    如果没加载过这个类
+                    long t0 = System.nanoTime();
+                    try {
+                        if (parent != null) {  parent是一个ClassLoader类型的属性private final ClassLoader parent;
+                            c = parent.loadClass(name, false);  我不明白为什么要用这个parent，因为如果parent不是空的，
+                                                                那会无限循环的调用这个方法。
+                        } else {
+                            c = findBootstrapClassOrNull(name); 利用Bootstrap加载器进行加载
+                        }
+                    } catch (ClassNotFoundException e) {
+                        // ClassNotFoundException thrown if class not found
+                        // from the non-null parent class loader
+                    }
+
+                    if (c == null) {
+                        // If still not found, then invoke findClass in order
+                        // to find the class.
+                        long t1 = System.nanoTime();
+                        c = findClass(name);
+
+                        // this is the defining class loader; record the stats
+                        sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 - t0);
+                        sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+                        sun.misc.PerfCounter.getFindClasses().increment();
+                    }
+                }
+                if (resolve) {
+                    resolveClass(c);
+                }
+                return c;
+            }
+        }
+
+        protected final Class<?> findLoadedClass(String name) {
+            if (!checkName(name))
+                return null;
+            return findLoadedClass0(name);
+        }
+        private native final Class<?> findLoadedClass0(String name);
+
+        利用Bootstrap加载器进行加载
+        /**
+         * Returns a class loaded by the bootstrap class loader;
+         * or return null if not found.
+         */
+        private Class<?> findBootstrapClassOrNull(String name)
+        {
+            if (!checkName(name)) return null;
+
+            return findBootstrapClass(name);
+        }
+        // return null if not found
+        private native Class<?> findBootstrapClass(String name);
+
+
+    2019/11/3 01:36问题得以解决
+    我原本是通过ClassLoader.getSystemClassLoader.loadClass();去加载
+    但是一直出现ClassNotFoundException
+    现在我改成了
+        Thread.currentThread().getContextClassLoader().loadClass();
+    问题就解决了，不会出异常，并且请求发过来，一路畅通，如我所料。
+    至于是为什么，我想应该是线程方面的问题，
+    我点开了源码，发现它和 ClassLoader.getSystemClassLoader().loadClass(); 调用的是同一个方法
+    现在已经比较晚了，我明天继续看
+
+
+    ClassLoader.getSystemClassLoader()方法无论何时均会返回ApplicationClassLoader，其只加载classpath下的class文件
+    在javaSE环境下，一般javaSE项目的classpath为bin/目录，因此只要编译后的class文件在classpath下就可以。
+    此时ApplicationClassLoader就可以加载动态生成的类。
+    但在javaEE环境下，我们的项目里的类是通过WebAppClassLoader类来加载的，此时我们获取了ApplicationClassLoader，
+    因此自然找不到class文件
+    因此我们可以使用Thread.currentThread().getContextClassLoader()来获取WebAppClassLoader来加载。
+
+    https://www.cnblogs.com/tuning/p/6943427.html
+    获得ClassLoader的几种方法可以通过如下3种方法：
+        1. this.getClass().getClassLoader();  使用当前类的ClassLoader
+        2. Thread.currentThread().getContextClassLoader();   使用当前线程的ClassLoader
+        3. ClassLoader.getSystemClassLoader();  使用系统ClassLoader，即系统的入口点所使用的ClassLoader。
+        注意： system ClassLoader与根ClassLoader并不一样。JVM下system ClassLoader通常为AppClassLoader
+
+        InputStream is = this.getClass().getClassLoader();
+        getClass();  获得当前对象所属的Class对象
+        getClassLoader();  取得class对象的类加载器
+
+        加载类的过程： 查找类所在的位置，并将找到的Java类的字节码加载到内存，生成对应的Class对象。Java的类加载器
+        就是专门用来实现这样的过程的.JVM并不只有一个类加载器，事实上，如果你愿意的话，你可以让JVM拥有无数个类加载器，
+        当时没有什么意义。类加载器自身也是一个类，它也需要被加载到内存中，那它是谁加载的？它是Bootstrap ClassLoader
+        加载的。Java的运行环境所需要的所有类库，都由BootstrapClassLoader来加载，它是C++程序，可以独立运行。
+        当BootstrapClassLoader完成任务之后(加载了Java的运行环境所需要的所有类库)，会生成一个AppClassLoader(实际上，
+        在这之前，系统会使用扩展类加载器，ExtensionClassLoader，它用于加载JAVA运行环境扩展包中的类).
+        这个AppClassLoader类加载器才是我们经常使用的，可以调用ClassLoader.getSystemClassLoader()来获得，
+        AppClassLoader查找类的区域是classpath。所有类加载器在加载类的时候，都会先找父级类加载器，如果父级类加载器
+        能够加载，那自己就不加载(双亲委派模型，不重不漏更安全)，如果父级加载不了，自己在加载。如果自己也加载不了，
+        那就会报异常(class not found exception).但是，当由直接使用类路径加载器加载类失败的时候，抛出的是
+        NoClassDefFoundException。如果使用自定义的类加载器loadClass()方法，或者使用ClassLoader的findSystemClass
+        方法来加载类，如果不刻意改变的话，抛出的是ClassNotFoundException
+        如果一个类是通过BootstrapClassLoader加载的，那我们通过这个类去获得classLoader的话，有些jdk的实现是会返回一个null，
+        比如：new Object().getClass().getClassLoader(); 会返回一个null，这样的话，上面的代码会空指针异常。因此，
+        我们最好使用我们自己的类来获取classLoader  this.getClass().getClassLoader();
+
+
+        ClassLoader主要对类的请求提供服务，当JVM需要某个类的时候，它根据名称向ClassLoader要这个类，然后由ClassLoader
+        返回这个类的class对象。
+
+        ClassLoader的主要方法：Class loadClass(String name, boolean resolve);
+        ClassLoader.loadClass();是ClassLoader的入口点；
+        defineClass方法是ClassLoader的主要诀窍。该方法接收由原始字节组成的数组并把它转换成Class对象，原始数组包含如从
+        系统或网络装入的数据。
+        findSystemClass方法从本地文件系统装入文件。它在本地文件系统中寻找类文件，如果存在，就使用defineClass将原始字节转换成Class对象，
+        以将该文件转换成类。这是JVM正常装入类的缺省机制。
+        resolveClass可以不完全的(不带解析)装入类，也可以完全的(带解析)装入类。当编写我们自己的loadClass时，可以调用
+        resolveClass，这取决于loadClass的resolve参数。
+        findLoadClass充当一个缓存，当请求loadClass装入类时，它调用该方法来查看ClassLoader是否已装入这个类，这样可以
+        避免重新装入已经存在的类所造成的麻烦。
+
+        load方法过程：
+            调用findLoadClass查看是否加载过了
+            如果没有，那么采用某种特殊的方式来获取原始字节(通过IO文件系统等)我不清楚；
+            如果已有原始字节，调用defineClass将它们转换成Class对象；
+            如果没有原始字节，调用findSystemClass查看是否从本地文件系统获取类；
+            如果resolve参数是true，那么调用resolveClass解析Class对象；
+            如果还是没有类，抛出ClassNotFoundException；
+            如果有类，将类返回给调用程序。
+
+        委派机制：
+            在JDK1.2之后，ClassLoader做了改进，使用了委托模型。所有系统中的ClassLoader组成一棵树，
+            ClassLoader在加载类到库时先让Parent寻找，Parent找不到，再由自己干活。
+            JVM在运行时会产生三个ClassLoader： BootstrapClassLoader， ExtensionClassLoader， AppClassLoader。
+            其中BootstrapClassLoader是核心加载器。它是C++写的程序。它用来加载核心类库。就是在lib下的类库。
+            ExtensionClassLoader加载lib/ext下的类库，
+            AppClassLoader加载ClassPath里的类库，
+            BootstrapClassLoader 是 ExtensionClassLoader的父级
+            ExtensionClassLoader 是 AppClassLoader的父级。
+            为什么有双亲委派模型：不重不漏更安全
+
+        委托模型还带来了一些问题：在某些情况下会混淆，如下是tomcat的classLoader结构
+        Bootstrap  -->  System -->  Common  -->  Catalina Shared -->  Webapp1  Webapp2...
+        由Common类加载器加载的类绝不能(根据名称)直接访问由Web应用程序加载的类。使这些类联系在一起的唯一
+        方法是通过使用这两个类都可见的接口。如 javax.servlet.Servlet
+
+        线程中的ClassLoader
+            每个运行中的线程都有一个成员 contextClassLoader，用来在运行时动态地加载其他类。可以使用方法：
+            Thread.currentThread().setContextClassLoader(...); 更改当前线程的contextClassLoader,来
+            改变其加载类的行为；也可以通过Thread.currentThread().getContextClassLoader();来获得当前线程
+            的ClassLoader
+            实际上，在Java应用中所有程序都运行在线程中，如果在线程中没有手动设置ClassLoader，对于一般的
+            Java类，如下两种方法获得的ClassLoader通常是同一个
+                this.getClass.getClassLoader();
+                Thread.currentThread().getContextClassLoader();
+                第一个得到的ClassLoader是静态的，表名是谁加载了它；
+                方法二得到的ClassLoader是动态的，谁执行(某个线程),就是那个执行者的ClassLoader。
+                对于单例模式的类，静态类等，加载一次后，这个实例会被很多程序(线程)调用，对于这些类，加载的
+                ClassLoader和执行线程的ClassLoader通常不同。
+
+        Web应用重点ClassLoader
+            在tomcat里，WebApp的ClassLoader的工作原理有点不同。它先试图自己加载类(在ContextPath/WEB-INF/...中加载类),
+            如果无法加载，再请求父级ClassLoader完成。
+
+            对于Web App线程，它的contextClassLoader是WebAppClassLoader
+            对于tomcat Server线程， 它的contextClassLoader是CatalinaClassLoader
+
+
+        我在ScanPackage.java中的getClasses方法里
+            System.out.println("Thread: " + Thread.currentThread().getContextClassLoader());
+            System.out.println("System: " + ClassLoader.getSystemClassLoader());
+            System.out.println("Who load ScanPackage.java: " + ScanPackage.class.getClassLoader());
+        输出的结果是：
+            Thread: ParallelWebappClassLoader
+              context: ROOT
+              delegate: false
+            ----------> Parent Classloader:
+            java.net.URLClassLoader@515f550a
+
+            System: sun.misc.Launcher$AppClassLoader@764c12b6
+            Who load ScanPackage.java: ParallelWebappClassLoader
+
+
+方法的参数我不知道有多少个，那我该怎么传递参数呢？
+    我尝试查看method是否有set参数的方法，如我所料，它没有。
+    我看了method.invoke()方法的参数，第一个传对象，第二个传要执行的方法要接收的参数。是个Object...args
+    也就是数组，那我能不能直接传递一个数组过去呢，尝试之后，答案是可以的。
+
+设置参数的值
+    一开始，我选择method.getParameterAnnotations(); 方法，去设置带注解的参数的值，但是我发现，如果参数不带注解，
+    比如：HttpServletRequest, HttpServletResponse 那我是设置不了的
+    后来我抛弃了这种写法，采用 method.getParameters();
+        List<Object> argumentsValue = new ArrayList<>();
+        Parameter[] parameters = method.getParameters();
+        for(Parameter parameter : parameters) {
+            String parameterType = parameter.getType().toString();
+            if(parameterType.endsWith(".http.HttpServletRequest")) {
+                argumentsValue.add(request);
+            }else if(parameterType.endsWith(".http.HttpServletResponse")) {
+                argumentsValue.add(response);
+            }
+            Param param = parameter.getAnnotation(Param.class);
+            if(param == null) {
+                continue;
+            }else {
+                argumentsValue.add(request.getParameter(param.value()));
+            }
+        }
+    通过这种方法，我就能得到所有需要的参数的值
+    method.invoke(obj, argumentsValue.toArray());
+
+对于RequestMapping这个注解中的method值
+    @RequestMapping(value="XXX", method=RequestMethod.XXX)
+    它是一个数组。所以我当我在loadMethod，把方法都加载到Map里的时候，我得挨个匹配
+    RequestMapping requestMapping = method.getAnnotation(RequestMapping.class);
+    先判断是否有这个注解
+    if(requestMapping == null) continue;
+    如果有这个注解，先获取路径
+    String value = requestMapping.value();
+    判断注解是否有写了method的值
+    if(requestMapping.method().length == 0) methodBox.put(value, method);  没有，那就只把路径作为key添进去就好了。
+    如果有，因为不知道写了几个，所以增强for循环
+    for(RequestMethod requestMethod : requestMapping.method() {
+        StringBuilder methodAnnCon = new StringBuilder(value);
+        methodBox.put(methodAnnCon.append("&requestMethod=").append(requestMethod).toString(), method);
+    }
+
+    这样就能确保对应的请求方式，对应的方法。如果注解里没写method的值，那就找不带请求方式的值的
+
+    最后我在处理请求的时候，要获取一个method，我在RequestResponseHandler的requestHandler调用getRequestMethod()方法
+    Method method = getRequestMethod(request.getRequestURI(), request.getMethod());
+    RequestResponseHandler类里有一个getRequestMethod()方法
+        private Method getRequestMethod(String requestPath, String requestMethod) {
+            return LoadClassMethod.getMethod(requestPath, requestMethod);
+        }
+    我把请求方式requestMethod传递给LoadClassMethod的getMethod()方法
+        public static Method getMethod(String requestPath, String requestMethod) {
+            String noMethodValue = getMethodRequestMappingValue(requestPath);
+            StringBuilder methodValue = new StringBuilder(noMethodValue);
+            Method method = methodBox.get(methodValue.append("&requestMethod=").append(requestMethod).toString());
+            if(method == null) method = methodBox.get(noMethodValue);
+            if(method == null) throw new MethodNotFoundException("Status: FAIL, Message: method not found");
+            return method;
+        }
+        方法里的其他方法不做解释
+
+        在这里，我先获取一个不带请求方式的(也就是只有路径而已)字符串。
+        然后将请求方式拼接到methodValue里面 methodValue是一个StringBuilder，这里的第534行
+        然后Method method = methodBox.get(methodValue.append("&requestMethod=").append(requestMethod).toString());
+        然后我判断有没有拿到对应的method(也就是判断是否为空)
+        如果为空，那我就尝试获取只带路径的(也就是RequestMapping这个注解不带method值的)
+        if(method == null) method = methodBox.get(noMethodValue);
+        如果这个时候依然为空，那就代表并没有这么一个方法，那就抛出异常
+        if(method == null) throw new MethodNotFoundException("Status: FAIL, Message: method not found");
+        如果没有抛出异常，就证明能找到对应的方法，那就把它返回回去
+        return method;
